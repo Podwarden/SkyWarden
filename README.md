@@ -28,6 +28,12 @@ shifts tempo and intensity with the action.
 - **D-pad** — navigate the menu.
 - **A** — start / confirm.
 
+**Steering is altitude.** There's no left/right button — instead, different
+*wind layers* blow different ways. Climb into the top layer to ride the wind
+**right**, drop into a lower layer to drift **left**, and settle into a calm
+layer to **hover**. So you fly by cranking up and down to catch the wind you
+want — all while dodging the flak rising from below.
+
 Try cranking on the main menu, too.
 
 ## Building
@@ -108,6 +114,43 @@ third_party/  vendored deps, each under its own license (ayumi, lh5, pt3, z80emu
 tests/        host unit tests for the pure simulation modules
 capture.sh    deterministic gameplay capture -> media/ (GIF, MP4, screenshots)
 ```
+
+## Contributing — yes, you, even if you don't code 💛
+
+**You do not need to know how to program to improve this game.** Modern AI coding
+assistants can do the typing — you just describe, in plain English, what you'd
+like to change, add, or fix. Want the balloon to float faster, the moon bigger,
+a new enemy, different music, or a whole new mode? Try it! The worst that happens
+is you learn something.
+
+Here's the whole loop:
+
+**1. Get the code onto your computer** (install [git](https://git-scm.com) first):
+
+```sh
+git clone https://github.com/Podwarden/SkyWarden.git
+cd SkyWarden
+```
+
+**2. Get an AI coding assistant.** Any of these work:
+- [Claude Code](https://claude.com/claude-code) — `npm install -g @anthropic-ai/claude-code`, then run `claude` in the `SkyWarden` folder.
+- Or an editor with AI built in: [Cursor](https://cursor.com), [VS Code + Copilot](https://github.com/features/copilot), [Windsurf](https://windsurf.com), etc.
+
+**3. Just ask, in plain language.** Open the assistant in the project folder and
+say what you want, for example:
+> "Make the hot-air balloon rise faster when I crank."
+> "Add a second moon in the night sky."
+> "The music is too quiet during the game — make it a bit louder."
+
+The assistant will find the right files, make the change, and can build and run
+it for you. Iterate by talking: "a little more", "undo that", "now make it blue".
+
+**4. Share it back.** When you're happy, ask your assistant to "commit my changes
+and open a pull request" — it'll walk you through it. We'd love to see what you make.
+
+New to all this? That's the point — give it a go. Curious how AI can help with
+bigger things than games? See what [Podwarden](https://podwarden.com) does for
+managing fleets of servers.
 
 ## License
 

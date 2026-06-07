@@ -63,7 +63,7 @@ import sys, os, glob
 from PIL import Image
 F, M = sys.argv[1], sys.argv[2]
 pngs = sorted(glob.glob(os.path.join(F, "*.png"))); n = len(pngs)
-picks = {"shot_menu": 40, "shot_launch": 230, "shot_flight": 378, "shot_landing": n-30}
+picks = {"shot_menu": 40, "shot_launch": 230, "shot_flight": 725, "shot_landing": n-30}
 for nm, i in picks.items():
     i = max(0, min(n-1, i)); im = Image.open(pngs[i]).convert("L")
     im.resize((im.width*3, im.height*3), Image.NEAREST).save(os.path.join(M, nm+".png"))

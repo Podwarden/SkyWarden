@@ -107,7 +107,7 @@ typedef enum { GS_SPLASH, GS_MENU, GS_ABOUT, GS_TUTORIAL,
                GS_LAUNCHED, GS_CENTERING, GS_FLIGHT, GS_CATCH, GS_WIN, GS_CRASH } GameState;
 static GameState g_state = GS_PRELAUNCH;
 /* --- M8 title screens --- */
-#define SPLASH_FRAMES 75      /* ~2.5s at 30fps before auto-advancing to the menu */
+#define SPLASH_FRAMES 300     /* 10s at 30fps before auto-advancing to the menu (A/B skips) */
 #define MENU_SLOT_X   296     /* device-px top-left of the 2x balloon on the menu (matches render) */
 #define MENU_SLOT_Y   110
 static LCDBitmap* g_title_splash      = NULL;
@@ -511,7 +511,7 @@ static void render(void) {
  * landing all run authentically; every rendered frame's 1-bit framebuffer is
  * dumped to out_c/frames/NNNN.raw and a sample-accurate WAV is written alongside
  * (capture_audio.c). Build + run: capture.sh. */
-#define CAP_SECONDS    27
+#define CAP_SECONDS    30
 #define CAP_FRAMES     (30 * CAP_SECONDS)
 
 /* Output dir is set by capture.sh via $SKYWARDEN_CAP_DIR (absolute, trailing /),
@@ -533,6 +533,10 @@ static void dump_raw_n(int n) {
     fwrite(fb, 1, LCD_ROWSIZE * 240, f); fclose(f);
 }
 
+/* Capture state shared by cap_script (sets inputs) and cap_step (drives frames). */
+static int g_cap_took_hit = 0;   /* set once the showcase hit lands; then we evade */
+static int g_cap_hit_slot = -1;  /* the designated hit-missile; homed onto our column */
+
 /* Scripted inputs (and the few transitions a player would trigger) for frame f. */
 static void cap_script(int f) {
     g_cap_dcrank = 0.0f; g_cap_buttons = 0;
@@ -543,8 +547,8 @@ static void cap_script(int f) {
     }
     if (f == 95)  { reset_game(); return; }          /* -> GS_PRELAUNCH */
     if (f == 100) { g_cap_buttons = kButtonA; return; } /* A: PRELAUNCH -> launch sequence */
-    if (f == 101) {                                   /* ambient ground flak during flight */
-        for (int i = 0; i < g_gun_count; i++) { g_guns[i].cooldown = 110; g_guns[i].timer = i * 30; }
+    if (f == 101) {                                   /* all flak is scripted below for control */
+        for (int i = 0; i < g_gun_count; i++) { g_guns[i].cooldown = 100000; g_guns[i].timer = 0; }
         return;
     }
     if (f >= CAP_FRAMES - 75) {                       /* guided landing: CATCH animates -> WIN */
@@ -554,33 +558,48 @@ static void cap_script(int f) {
         return;
     }
     if (g_state == GS_LAUNCHED || g_state == GS_CENTERING || g_state == GS_FLIGHT) {
-        /* Scripted close calls: at set moments launch a missile from just below us
-         * (same column) so the camera frames a clear rising-missile-vs-climbing-
-         * balloon dodge. The sprite/physics are the game's real missile. */
-        if (f == 360 || f == 440 || f == 520 || f == 600 || f == 680) {
+        /* The demo teaches one concept per segment (no overlap, so each reads
+         * clearly). Horizontal steering IS altitude: each wind echelon blows a
+         * different way — y36 -> +2.6 RIGHT, y114 -> -3.2 LEFT, y72 -> ~0 HOVER. */
+        float target = 110.0f; int dodge_seg = 0;
+        if      (f < 430) target = 36.0f;         /* FLY RIGHT — launch apex is already up here */
+        else if (f < 545) target = 114.0f;        /* FLY LEFT   (mid echelon)   */
+        else if (f < 640) target = 72.0f;         /* HOVER      (neutral echelon) */
+        else if (f < 700) target = 90.0f;         /* settle for the showcase hit */
+        else if (f < 820) { target = 95.0f; dodge_seg = 1; }    /* DODGE flak    */
+        else              target = 110.0f;        /* approach the landing       */
+
+        /* Showcase HIT: one homed, point-blank missile after the nav lessons.
+         * We don't evade it, so it connects — a life lost + balloon explosion. */
+        if (f == 660) {
             for (int m = 0; m < MAX_MISSILES; m++) if (!g_missiles[m].alive) {
-                g_missiles[m].x = g_wx; g_missiles[m].y = g_v.y + 90.0f;
+                g_missiles[m].x = g_wx; g_missiles[m].y = g_v.y + 40.0f;
+                g_missiles[m].vy = MISSILE_VY; g_missiles[m].alive = 1; g_cap_hit_slot = m; break;
+            }
+        }
+        if (!g_cap_took_hit && g_cap_hit_slot >= 0 && g_missiles[g_cap_hit_slot].alive)
+            g_missiles[g_cap_hit_slot].x = g_wx;   /* home onto our column -> sure hit */
+
+        /* DODGE segment: missiles offset opposite our drift (sure misses); we climb
+         * to evade them on camera. */
+        if (dodge_seg && (f == 710 || f == 745 || f == 775)) {
+            for (int m = 0; m < MAX_MISSILES; m++) if (!g_missiles[m].alive) {
+                g_missiles[m].x = g_wx - 32.0f;   /* always to our left; the dodge-climb */
+                g_missiles[m].y = g_v.y + 80.0f;  /* rides the top wind RIGHT, away from it */
                 g_missiles[m].vy = MISSILE_VY; g_missiles[m].alive = 1; break;
             }
         }
-        /* Nearest rising missile roughly in our column and below us is the real
-         * threat (missiles rise vertically). Climbing hard out-paces it (terminal
-         * ~2.2px/frame up vs 1.3 rise), so an evasive burn dodges it. */
-        float best_dx = 1e9f; int threat = 0;
-        for (int m = 0; m < MAX_MISSILES; m++) if (g_missiles[m].alive) {
-            float dx = fabsf(camera_wrap_delta(g_missiles[m].x - g_wx, (float)WORLD_W));
-            if (dx < 90.0f && g_missiles[m].y > g_v.y - 24.0f && dx < best_dx) {
-                best_dx = dx; threat = 1;
+        if (dodge_seg) {
+            for (int m = 0; m < MAX_MISSILES; m++) if (g_missiles[m].alive) {
+                float dx = fabsf(camera_wrap_delta(g_missiles[m].x - g_wx, (float)WORLD_W));
+                if (dx < 70.0f && g_missiles[m].y > g_v.y - 24.0f) { target = 34.0f; break; }  /* climb-dodge */
             }
         }
-        if (threat) {
-            g_cap_dcrank = 20.0f;                  /* evasive climb — outrun the missile */
-        } else {
-            /* cruise lower, in the danger band, so dodges read as big visible climbs */
-            float weave = 150.0f + 22.0f * sinf(g_t * 0.035f);
-            g_cap_dcrank = (g_v.y > weave) ? 11.0f : 0.0f;
-        }
-        if (g_health < 1) g_health = 1;            /* anti-crash safety only; dodging keeps it high */
+        /* Predictive altitude hold: look ahead by the current velocity so thermal
+         * momentum doesn't overshoot the target echelon (keeps each wind layer clean). */
+        float predict = g_v.y + g_v.vy * 14.0f;
+        g_cap_dcrank = (predict > target) ? 16.0f : 0.0f;   /* burn to reach/hold target */
+        if (g_health < 1) g_health = 1;            /* anti-crash safety only */
     }
 }
 
@@ -608,8 +627,10 @@ static int cap_step(void) {
     for (int m = 0; m < MAX_MISSILES; m++) if (g_missiles[m].alive) { any = 1; break; }
     if (any && !g_cap_had_miss) pd->system->logToConsole("cap: missile airborne @%d", g_cap_f);
     g_cap_had_miss = any;
-    if (g_health < g_cap_prevhp) { g_cap_hits++; pd->system->logToConsole("cap: HIT @%d hp=%d", g_cap_f, g_health); }
+    if (g_health < g_cap_prevhp) { g_cap_hits++; g_cap_took_hit = 1; pd->system->logToConsole("cap: HIT @%d hp=%d", g_cap_f, g_health); }
     g_cap_prevhp = g_health;
+    if (g_cap_f % 30 == 0)   /* motion trace: vx>0 right, vx<0 left, ~0 hover (vx x100) */
+        pd->system->logToConsole("cap: f=%d y=%d vx=%d wx=%d", g_cap_f, (int)g_v.y, (int)(g_vx*100), (int)g_wx);
     g_cap_f++;
     return 0;
 }
@@ -715,7 +736,7 @@ static int update(void* ud) {
     if (g_state == GS_SPLASH || g_state == GS_MENU || g_state == GS_ABOUT || g_state == GS_TUTORIAL) {
         PDButtons fp = INPUT_BUTTONS();
         if (g_state == GS_SPLASH) {
-            if (++g_splash_t >= SPLASH_FRAMES || (fp & kButtonA)) g_state = GS_MENU;
+            if (++g_splash_t >= SPLASH_FRAMES || (fp & (kButtonA | kButtonB))) g_state = GS_MENU;
         } else if (g_state == GS_MENU) {
             if (fp & kButtonUp)   g_menu_sel = 0;
             if (fp & kButtonDown) g_menu_sel = 1;
