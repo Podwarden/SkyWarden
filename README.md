@@ -5,6 +5,23 @@ in C. Crank the burner to ride the thermals, fight the wind, dodge the flak, and
 set down on the landing tower — all to an adaptive AY chiptune soundtrack that
 shifts tempo and intensity with the action.
 
+## Gameplay
+
+![Sky Warden gameplay](media/gameplay.gif)
+
+▶ **[Watch the clip with sound (MP4)](media/gameplay.mp4)** — the GIF above is silent.
+
+<table>
+  <tr>
+    <td align="center"><img src="media/shot_menu.png" alt="Title menu" width="400"><br>Menu</td>
+    <td align="center"><img src="media/shot_launch.png" alt="Launch countdown" width="400"><br>Launch</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="media/shot_flight.png" alt="Flight and combat" width="400"><br>Flight &amp; flak</td>
+    <td align="center"><img src="media/shot_landing.png" alt="Landing on the tower" width="400"><br>Landing</td>
+  </tr>
+</table>
+
 ## Controls
 
 - **Crank** — fire the burner: heat lifts the balloon, gravity brings it down.
