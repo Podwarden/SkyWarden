@@ -14,6 +14,19 @@
 #include <string.h>
 #if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
 #include <stdio.h>
+#include <stdlib.h>
+#include "capture_audio.h"
+/* In the capture harness, game input comes from the scripted director (below)
+ * instead of the hardware crank/buttons, so the playthrough is deterministic. */
+static float g_cap_dcrank = 0.0f;
+static int   g_cap_buttons = 0;
+#define INPUT_CRANK()   (g_cap_dcrank)
+#define INPUT_DOCKED()  (0)
+#define INPUT_BUTTONS() ((PDButtons)g_cap_buttons)
+#else
+#define INPUT_CRANK()   (pd->system->getCrankChange())
+#define INPUT_DOCKED()  (pd->system->isCrankDocked())
+#define INPUT_BUTTONS() (read_buttons())
 #endif
 
 #define SCREEN_W 400
@@ -459,7 +472,7 @@ static void render(void) {
         }
     } else if (g_balloon) {
         int burner_vis = (g_state == GS_LAUNCHED || g_state == GS_CENTERING || g_state == GS_FLIGHT) &&
-            (!pd->system->isCrankDocked()) && (fabsf(g_frame_dcrank) > 2.0f);
+            (!INPUT_DOCKED()) && (fabsf(g_frame_dcrank) > 2.0f);
         int dxi = balloon_basket_index(g_vx);
         int base_idx = balloon_frame_index(dxi, burner_vis, g_flame); /* 0..24 */
         int idx = g_dither * 25 + base_idx;                           /* phase block; 0..74 */
@@ -479,7 +492,7 @@ static void render(void) {
         hud_panel("LANDED!  (A) again", 112);
     else if (g_state == GS_CRASH)
         hud_panel("CRASH!  (A) retry", 112);
-    else if (g_state == GS_FLIGHT && pd->system->isCrankDocked())
+    else if (g_state == GS_FLIGHT && INPUT_DOCKED())
         hud_panel("Paused - undock crank", 112);
     /* health bar (top-right), shown once airborne */
     if (g_state == GS_LAUNCHED || g_state == GS_CENTERING || g_state == GS_FLIGHT || g_expl_frame >= 0) {
@@ -493,40 +506,118 @@ static void render(void) {
 }
 
 #if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
-/* Debug screenshot harness: render specific game states and dump the raw 1-bit
- * framebuffer (LCD_ROWSIZE*240 bytes) to host files, so the actual emulator
- * output can be compared to the Python mock. Built with: make UDEFS=-DBALLY_SHOT */
-static void dump_raw(const char* path) {
+/* Deterministic gameplay-capture harness. Drives the real update() loop with
+ * scripted inputs (g_cap_dcrank/g_cap_buttons) so physics, wind, enemies and the
+ * landing all run authentically; every rendered frame's 1-bit framebuffer is
+ * dumped to out_c/frames/NNNN.raw and a sample-accurate WAV is written alongside
+ * (capture_audio.c). Build + run: capture.sh. */
+#define CAP_SECONDS    27
+#define CAP_FRAMES     (30 * CAP_SECONDS)
+
+/* Output dir is set by capture.sh via $SKYWARDEN_CAP_DIR (absolute, trailing /),
+ * so the harness has no hardcoded paths. cap_path builds "<dir><leaf>". */
+static const char* cap_dir(void) {
+    const char* d = getenv("SKYWARDEN_CAP_DIR");
+    return (d && *d) ? d : "./";
+}
+static void cap_path(char* buf, int n, const char* leaf_fmt, int idx) {
+    char leaf[64]; snprintf(leaf, sizeof(leaf), leaf_fmt, idx);
+    snprintf(buf, n, "%s%s", cap_dir(), leaf);
+}
+
+static void dump_raw_n(int n) {
+    char path[512]; cap_path(path, sizeof(path), "frames/%04d.raw", n);
     uint8_t* fb = pd->graphics->getFrame();
     FILE* f = fopen(path, "wb");
-    if (!f) { pd->system->logToConsole("shot: fopen failed %s", path); return; }
+    if (!f) { pd->system->logToConsole("cap: fopen failed %s", path); return; }
     fwrite(fb, 1, LCD_ROWSIZE * 240, f); fclose(f);
-    pd->system->logToConsole("shot: wrote %s", path);
 }
-#define SHOT_DIR "/Users/ip/projects/playdate-bally/bally/assets_work/out_c/"
-static int g_shotn = 0;
-static int shot_update(void) {
-    g_shotn++;
-    if (g_shotn == 3) {                 /* prelaunch state */
-        reset_game(); render();
-        dump_raw(SHOT_DIR "prelaunch.raw");
-    } else if (g_shotn == 6) {          /* mid-flight (free, centered) over terrain */
-        g_state = GS_FLIGHT; g_wx = 150.0f; g_vx = 1.2f; g_v.y = 110.0f; g_v.heat = 0.7f; g_flame = 1;
-        g_cam.x = camera_world_wrap(g_wx - SCREEN_W * 0.5f, (float)WORLD_W);
-        spawn_guns();
-        g_guns[0].x = g_wx + 40.0f;                                  /* a gun just ahead, on screen */
-        g_missiles[0].x = g_wx + 40.0f; g_missiles[0].y = 170.0f; g_missiles[0].alive = 1;
-        g_health = 66;                                               /* partial bar to verify the HUD */
-        render();
-        dump_raw(SHOT_DIR "flight.raw");
-    } else if (g_shotn == 9) {          /* launch: tower extended to apex (rod telescoped out) */
-        reset_game(); g_state = GS_HOLD; g_tower.ext = 1.0f; g_seq = 45;
-        g_v.y = tower_cup_y(&g_tower); g_wx = g_tower.x;
-        g_cam.x = camera_world_wrap(g_tower.x - LAUNCH_RIGHT_X, (float)WORLD_W);
-        render();
-        dump_raw(SHOT_DIR "extended.raw");
+
+/* Scripted inputs (and the few transitions a player would trigger) for frame f. */
+static void cap_script(int f) {
+    g_cap_dcrank = 0.0f; g_cap_buttons = 0;
+    if (f < 95) {                                    /* MENU: showcase the crank-lift balloon */
+        if (g_state != GS_MENU) g_state = GS_MENU;
+        if (f >= 20 && f < 60) g_cap_dcrank = 9.0f;  /* crank up, then release to sink back */
+        return;
     }
-    return 1;
+    if (f == 95)  { reset_game(); return; }          /* -> GS_PRELAUNCH */
+    if (f == 100) { g_cap_buttons = kButtonA; return; } /* A: PRELAUNCH -> launch sequence */
+    if (f == 101) {                                   /* ambient ground flak during flight */
+        for (int i = 0; i < g_gun_count; i++) { g_guns[i].cooldown = 110; g_guns[i].timer = i * 30; }
+        return;
+    }
+    if (f >= CAP_FRAMES - 75) {                       /* guided landing: CATCH animates -> WIN */
+        if (g_state != GS_WIN && g_state != GS_CATCH) {
+            g_state = GS_CATCH; g_wx = g_tower.x; g_v.vy = 0.0f; g_vx = 0.0f;
+        }
+        return;
+    }
+    if (g_state == GS_LAUNCHED || g_state == GS_CENTERING || g_state == GS_FLIGHT) {
+        /* Scripted close calls: at set moments launch a missile from just below us
+         * (same column) so the camera frames a clear rising-missile-vs-climbing-
+         * balloon dodge. The sprite/physics are the game's real missile. */
+        if (f == 360 || f == 440 || f == 520 || f == 600 || f == 680) {
+            for (int m = 0; m < MAX_MISSILES; m++) if (!g_missiles[m].alive) {
+                g_missiles[m].x = g_wx; g_missiles[m].y = g_v.y + 90.0f;
+                g_missiles[m].vy = MISSILE_VY; g_missiles[m].alive = 1; break;
+            }
+        }
+        /* Nearest rising missile roughly in our column and below us is the real
+         * threat (missiles rise vertically). Climbing hard out-paces it (terminal
+         * ~2.2px/frame up vs 1.3 rise), so an evasive burn dodges it. */
+        float best_dx = 1e9f; int threat = 0;
+        for (int m = 0; m < MAX_MISSILES; m++) if (g_missiles[m].alive) {
+            float dx = fabsf(camera_wrap_delta(g_missiles[m].x - g_wx, (float)WORLD_W));
+            if (dx < 90.0f && g_missiles[m].y > g_v.y - 24.0f && dx < best_dx) {
+                best_dx = dx; threat = 1;
+            }
+        }
+        if (threat) {
+            g_cap_dcrank = 20.0f;                  /* evasive climb — outrun the missile */
+        } else {
+            /* cruise lower, in the danger band, so dodges read as big visible climbs */
+            float weave = 150.0f + 22.0f * sinf(g_t * 0.035f);
+            g_cap_dcrank = (g_v.y > weave) ? 11.0f : 0.0f;
+        }
+        if (g_health < 1) g_health = 1;            /* anti-crash safety only; dodging keeps it high */
+    }
+}
+
+/* Called at the top of update(); returns 1 once the whole clip is captured. Dumps
+ * the PREVIOUS frame's video+audio (getFrame() holds the last render), so a single
+ * hook captures every rendered frame in sync. */
+static int g_cap_f = 0, g_cap_hits = 0, g_cap_prevhp = MAX_HEALTH, g_cap_had_miss = 0, g_cap_done = 0;
+static int cap_step(void) {
+    if (g_cap_done) return 1;
+    if (g_cap_f == 0) { char w[512]; cap_path(w, sizeof(w), "gameplay.wav", 0); capture_audio_begin(w); }
+    if (g_cap_f > 0) { dump_raw_n(g_cap_f - 1); capture_audio_frame(); }
+    if (g_cap_f >= CAP_FRAMES) {
+        capture_audio_end();
+        char d[512]; cap_path(d, sizeof(d), "done", 0);
+        FILE* f = fopen(d, "wb"); if (f) { fputc('1', f); fclose(f); }
+        pd->system->logToConsole("cap: done, %d frames, hits=%d final_hp=%d state=%d",
+                                 CAP_FRAMES, g_cap_hits, g_health, (int)g_state);
+        g_cap_done = 1;
+        fflush(NULL);
+        exit(0);   /* terminate the simulator cleanly so capture.sh proceeds (no zombie) */
+    }
+    cap_script(g_cap_f);
+    /* instrumentation: log missile waves and any hits taken, to verify evasion */
+    int any = 0;
+    for (int m = 0; m < MAX_MISSILES; m++) if (g_missiles[m].alive) { any = 1; break; }
+    if (any && !g_cap_had_miss) pd->system->logToConsole("cap: missile airborne @%d", g_cap_f);
+    g_cap_had_miss = any;
+    if (g_health < g_cap_prevhp) { g_cap_hits++; pd->system->logToConsole("cap: HIT @%d hp=%d", g_cap_f, g_health); }
+    g_cap_prevhp = g_health;
+    g_cap_f++;
+    return 0;
+}
+#endif
+
+#if !(defined(BALLY_SHOT) && defined(TARGET_SIMULATOR))
+static PDButtons read_buttons(void) {
+    PDButtons p; pd->system->getButtonState(NULL, &p, NULL); return p;
 }
 #endif
 
@@ -597,13 +688,13 @@ static void fly_step(int burner_on) {
 static int update(void* ud) {
     (void)ud;
 #if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
-    return shot_update();
+    if (cap_step()) return 0;     /* scripted capture drives inputs; stop when done */
 #endif
     /* Read the crank ONCE per frame. getCrankChange() returns the delta since
      * the last call, so a single read is shared by flight input, the burner
      * whoosh, the tutorial, the render burner sprite, and the music driver
      * below — any extra in-frame read would steal this delta from the others. */
-    float dcrank = pd->system->getCrankChange();
+    float dcrank = INPUT_CRANK();
     g_frame_dcrank = dcrank;
 
     /* Adaptive music runs in EVERY state (front-end, tutorial, flight). */
@@ -622,7 +713,7 @@ static int update(void* ud) {
     music_tick(mscene, intensity, on_pad, missiles);
 
     if (g_state == GS_SPLASH || g_state == GS_MENU || g_state == GS_ABOUT || g_state == GS_TUTORIAL) {
-        PDButtons fp; pd->system->getButtonState(NULL, &fp, NULL);
+        PDButtons fp = INPUT_BUTTONS();
         if (g_state == GS_SPLASH) {
             if (++g_splash_t >= SPLASH_FRAMES || (fp & kButtonA)) g_state = GS_MENU;
         } else if (g_state == GS_MENU) {
@@ -643,7 +734,7 @@ static int update(void* ud) {
             g_menu_sway++;
             /* Crank lifts the balloon (whoosh while cranking); release lets it sink
              * with the flight physics, settling back on its menu slot. */
-            int mburner = (!pd->system->isCrankDocked()) && (fabsf(dcrank) > 2.0f);
+            int mburner = (!INPUT_DOCKED()) && (fabsf(dcrank) > 2.0f);
             audio_burner(mburner, dcrank);
             VerticalState mvs = { g_menu_y, g_menu_vy, g_menu_heat };
             physics_vertical_step(&g_menu_pc, &mvs, mburner);
@@ -652,7 +743,7 @@ static int update(void* ud) {
             if (fp & (kButtonA | kButtonB)) g_state = GS_MENU;
         } else if (g_state == GS_TUTORIAL) {
             float tdc = dcrank;                          /* shared single per-frame crank read */
-            int burner = (!pd->system->isCrankDocked()) && (fabsf(tdc) > 2.0f);
+            int burner = (!INPUT_DOCKED()) && (fabsf(tdc) > 2.0f);
             g_tut_burner = burner;                       /* drives the flame sprite in render */
             audio_burner(burner, tdc);                   /* whoosh only while cranking */
             if (g_tut_flash > 0) {
@@ -696,14 +787,13 @@ static int update(void* ud) {
     }
     g_moon_x -= 0.03f; if (g_moon_x < 0.0f) g_moon_x += SCREEN_W;  /* slow moon drift */
 
-    PDButtons pushed;
-    pd->system->getButtonState(NULL, &pushed, NULL);
+    PDButtons pushed = INPUT_BUTTONS();
     int flying = (g_state == GS_LAUNCHED || g_state == GS_CENTERING || g_state == GS_FLIGHT);
-    int burner_on = flying && (!pd->system->isCrankDocked()) && (fabsf(dcrank) > 2.0f);
+    int burner_on = flying && (!INPUT_DOCKED()) && (fabsf(dcrank) > 2.0f);
     audio_burner(burner_on, dcrank);
 
     /* Crank docked pauses only free flight. */
-    if (g_state == GS_FLIGHT && pd->system->isCrankDocked()) { render(); return 1; }
+    if (g_state == GS_FLIGHT && INPUT_DOCKED()) { render(); return 1; }
 
     /* While exploding, freeze the sim and play the animation to completion,
      * regardless of state (a hit can coincide with a landing/crash transition). */

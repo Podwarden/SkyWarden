@@ -53,6 +53,51 @@ cmake --build cmake-build
 ctest --test-dir cmake-build
 ```
 
+## Installing on a Playdate (sideload)
+
+Grab `SkyWarden.pdx.zip` from the [Releases](../../releases) page (or build it
+yourself — see above), then install it one of two ways:
+
+**Over Wi-Fi (easiest):**
+1. Sign in at [play.date/account/sideload](https://play.date/account/sideload/)
+   and upload `SkyWarden.pdx.zip`.
+2. On the Playdate: **Settings → Games**, then pull down to sync. Sky Warden
+   appears in your sideloaded games. (The device must be online.)
+
+**Over USB:**
+1. Connect the Playdate and put it in **Data Disk** mode
+   (**Settings → System → Reboot to Data Disk**).
+2. Copy `SkyWarden.pdx` into the `Games/` folder on the mounted `PLAYDATE` disk.
+3. Eject the disk; the game shows up on the device.
+
+## Capturing gameplay media
+
+The GIF/MP4/screenshots above are generated deterministically — no manual
+recording. With the SDK, `ffmpeg`, and `python3` (numpy + Pillow) installed:
+
+```sh
+./capture.sh        # -> media/gameplay.mp4 (with sound), media/gameplay.gif, media/shot_*.png
+```
+
+It builds a sim-only capture harness (`-DBALLY_SHOT`), runs the Simulator headless
+through a scripted playthrough dumping every frame plus a sample-accurate WAV
+(adaptive music + re-synthesized SFX), then encodes the results and restores the
+normal playable build.
+
+## Releases (publishing the binary)
+
+For maintainers — attach the built bundle to a GitHub Release:
+
+```sh
+make
+ditto -c -k --keepParent SkyWarden.pdx SkyWarden.pdx.zip   # zip the .pdx for sideloading
+gh release create v1.0.0 SkyWarden.pdx.zip \
+  --title "Sky Warden v1.0.0" --notes "Playable build for sideloading."
+```
+
+(Or use the web UI: **Releases → Draft a new release**, then upload
+`SkyWarden.pdx.zip`.)
+
 ## Layout
 
 ```
@@ -61,6 +106,7 @@ Source/       Playdate bundle assets — images/ and tunes/ (.pt3 soundtrack)
 engine/       AY chiptune playback engine (PT3/PSG/VTX/YM/AY formats)
 third_party/  vendored deps, each under its own license (ayumi, lh5, pt3, z80emu)
 tests/        host unit tests for the pure simulation modules
+capture.sh    deterministic gameplay capture -> media/ (GIF, MP4, screenshots)
 ```
 
 ## License

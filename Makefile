@@ -32,7 +32,8 @@ SRC = src/bally.c \
       third_party/pt3/pt3.c \
       third_party/z80emu/z80emu.c \
       src/music_map.c \
-      src/music.c
+      src/music.c \
+      src/capture_audio.c
 
 UINCDIR = src engine/include engine/src third_party/lh5 third_party/pt3 third_party/z80emu
 

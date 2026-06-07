@@ -15,3 +15,6 @@ cmake-build/
 CMakeCache.txt
 CMakeFiles/
 *.wav.actual
+
+# Gameplay capture working dir (see capture.sh)
+.capture/

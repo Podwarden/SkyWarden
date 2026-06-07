@@ -97,7 +97,14 @@ void music_init(PlaydateAPI* p) {
     g_intensity = 0.0f; g_desired_part = 0; g_active_part = -1; g_last_pos = -1;
     g_vol = 0.0f; g_paused = 0; g_want_tune = TUNE_INTRO;
     load_tune(TUNE_INTRO);                          /* start on the intro track */
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+    /* Capture build: do NOT register the audio callback. The engine must be
+     * advanced by exactly one music_render_offline() per video frame, so a live
+     * callback rendering on the audio thread would double-advance and desync. */
+    (void)music_cb; g_src = NULL;
+#else
     g_src = pd->sound->addSource(music_cb, NULL, /*stereo*/1);
+#endif
 }
 
 void music_tick(int scene, float intensity, int on_pad, int missiles) {
@@ -143,3 +150,13 @@ void music_tick(int scene, float intensity, int on_pad, int missiles) {
 }
 
 void music_set_paused(int paused) { g_paused = paused; }
+
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+int music_render_offline(int16_t* out, int n_samples) {
+    float v = g_paused ? 0.0f : g_vol;
+    if (!g_eng || v <= 0.0f) { memset(out, 0, (size_t)n_samples * sizeof(int16_t)); return 1; }
+    engine_render(g_eng, out, n_samples);   /* mono; same path as music_cb */
+    if (v < 1.0f) for (int i = 0; i < n_samples; i++) out[i] = (int16_t)((int)out[i] * v);
+    return 1;
+}
+#endif

@@ -1,5 +1,8 @@
 #include "audio.h"
 #include "audio_util.h"
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+#include "capture_audio.h"   /* forward SFX to the offline WAV renderer */
+#endif
 
 /* --- tunable SFX levels / shaping (dialed by ear on-device) --- */
 #define SFX_CHANNEL_VOL  1.0f     /* channel trim; per-synth volumes do the mixing */
@@ -62,17 +65,26 @@ void audio_init(PlaydateAPI* pd) {
 }
 
 void audio_burner(int on, float crank_speed) {
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+    capture_sfx_burner(on ? audio_burner_level(crank_speed) : 0.0f); return;
+#endif
     if (!g_burner) return;
     float v = on ? audio_burner_level(crank_speed) : 0.0f;
     g_pd->sound->synth->setVolume(g_burner, v, v);
 }
 
 void audio_gun_fire(void) {
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+    capture_sfx_gun(); return;
+#endif
     if (!g_gun) return;
     g_pd->sound->synth->playNote(g_gun, GUN_NOTE_HZ, 1.0f, GUN_LEN, 0);
 }
 
 void audio_explosion(void) {
+#if defined(BALLY_SHOT) && defined(TARGET_SIMULATOR)
+    capture_sfx_explosion(); return;
+#endif
     if (!g_expl) return;
     g_pd->sound->synth->playNote(g_expl, EXPL_NOTE_HZ, 1.0f, EXPL_LEN, 0);
 }
