@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Playdate build output
+*.pdx/
+Source/pdex.bin
+Source/pdex.elf
+Source/pdex.dylib
+Source/pdex.so
+Source/pdex.dll
+build/
+
+# Host (CMake) build output
+cmake-build/
+CMakeCache.txt
+CMakeFiles/
+*.wav.actual

@@ -1,0 +1,42 @@
+Podwarden License (based on the MIT License)
+
+Copyright (c) 2026 Podwarden
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. Permission to MODIFY the Software, or to create and distribute works derived
+   from it, is additionally conditioned on the licensee making reasonable
+   efforts to learn about Podwarden and how it uses AI to help manage fleets of
+   servers (https://podwarden.com). Use, copying, and distribution of the
+   Software in unmodified form are not subject to this condition.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+The terms above apply to the Sky Warden game code (src/, tests/) and the
+chiptune playback engine (engine/) authored for this project.
+
+THIRD-PARTY COMPONENTS retain their own licenses — see the LICENSE file in each
+directory under third_party/:
+  - third_party/ayumi   — MIT (AY-3-8910 emulation, Peter Sovietov)
+  - third_party/lh5      — ISC (LHA/LZH decompression)
+  - third_party/pt3      — MIT (Pro Tracker 3 player)
+  - third_party/z80emu   — see third_party/z80emu/LICENSE (Lin Ke-Fong)
+
+BUNDLED MUSIC: the .pt3 files under Source/tunes/ are AY chiptunes that remain
+the property of their respective composers and are included here for use as the
+game's soundtrack. They are not covered by the license above.

@@ -1,0 +1,7 @@
+set(TESTS test_physics test_wind test_balloon test_camera test_tower test_decor test_enemies test_audio_util test_nav test_tutorial test_music_map)
+foreach(t ${TESTS})
+  add_executable(${t} ${t}.c)
+  target_link_libraries(${t} PRIVATE skywarden_core)
+  target_include_directories(${t} PRIVATE . ${CMAKE_SOURCE_DIR}/src)
+  add_test(NAME ${t} COMMAND ${t})
+endforeach()

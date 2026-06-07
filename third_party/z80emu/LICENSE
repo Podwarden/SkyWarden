@@ -1,0 +1,13 @@
+z80emu is by Lin Ke-Fong (anotherlin on GitHub).
+
+Per the per-file headers (e.g. z80emu.h, z80emu.c, instructions.h, macros.h,
+tables.h, z80config.h, z80user.h, all by Lin Ke-Fong, Copyright (c) 2012-2017):
+
+    "This code is free, do whatever you want with it."
+
+The upstream repository (https://github.com/anotherlin/z80emu) ships no
+separate LICENSE / COPYING file; the in-source statement above is the entire
+license grant. It is treated here as a permissive public-domain-equivalent
+license compatible with MIT/zlib usage.
+
+Copyright (c) 2012-2017 Lin Ke-Fong
