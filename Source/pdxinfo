@@ -1,0 +1,7 @@
+name=Sky Warden
+author=PodWarden
+description=Hot-air balloon navigation game
+bundleID=com.podwarden.skywarden
+version=1.0.1
+buildNumber=2
+imagePath=
